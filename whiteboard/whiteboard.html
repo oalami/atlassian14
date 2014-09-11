@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<head>
+  <title>Whiteboard</title>
+  <style type="text/css">
+    body {
+      margin: 0px;
+      padding: 0px;
+      font-family: ari
+      al;
+      font-size :11px;
+
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+
+    #top, #bottom {
+      border:1px solid gray;
+    }
+
+    #top {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      z-index: 2;
+    }
+
+    #toolbar {
+      position: absolute;
+      top: 0px;
+      width: 980px;
+      z-index: 4;
+      margin: 1px;
+      padding: 3px;
+      background-color: #e2e2e2;
+      box-sizing: border-box;
+    }
+
+    div.cursor {
+      position: absolute;
+      border:1px solid red;
+      border-width: 1px 0 0 1px;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    input[type=radio] {
+      margin-left: 30px;
+    }
+  </style>
+</head>
+
+<body>
+<canvas id="bottom" width="980px" height="980px"></canvas>
+<canvas id="top" width="980px" height="980px"></canvas>
+
+<div id="toolbar">
+  <button id="clear" hotkey="67">Clear (hotkey: c)</button>
+  <button id="undo" hotkey="90">Undo (hotkey: z)</button>
+
+  <strong>Brush:</strong>
+  <input type="radio" name="brush" color="#000000" thickness="1" hotkey="66" checked="checked" /> Black (hotkey: b)
+  <input type="radio" name="brush" color="#008000" thickness="1" hotkey="71" /> Green (hotkey: g)
+  <input type="radio" name="brush" color="#FF0000" thickness="1" hotkey="82" /> Red (hotkey: r)
+  <input type="radio" name="brush" color="#0000FF" thickness="1" hotkey="76" /> Blue (hotkey: l)
+  <input type="radio" name="brush" color="#FFFFFF" thickness="20" hotkey="69" /> Eraser (hotkey: e)
+</div>
+
+<script src="https://cdn.firebase.com/js/client/1.0.19/firebase.js"></script>
+<script type="text/javascript" src="https://documentcloud.github.com/underscore/underscore-min.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+<script src="http://localhost:2990/jira/atlassian-connect/all.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+  $(document).ready(function() {    
+    AP.getUser(function(user) { 
+        console.log(user);
+        setup(user.fullName);
+    });
+  });
+
+  function setup(username) {
+    var applicationId = 'atlassian14';
+    var boardId = "atlassian14" || prompt("Enter a unique id for your board");
+    
+    var width = 980;
+    var height = 980;
+
+    var rootRef = new Firebase('https://' + applicationId + '.firebaseio-demo.com/');
+    var boardRef = rootRef.child(boardId);
+    var layersRef = boardRef.child('layers');
+    var usersRef = boardRef.child('users');
+    var userRef = usersRef.child(username);
+
+    var $body = $("body");
+
+    var $bottomCanvas = $('#bottom');
+    var $topCanvas = $('#top');
+
+    var bottomCanvas = $bottomCanvas.get(0);
+    var topCanvas = $topCanvas.get(0);
+
+    var bottomCtx = bottomCanvas.getContext('2d');
+    var topCtx = topCanvas.getContext('2d');
+
+    var newLayer;
+
+    // View:
+
+    var clear = function(ctx) {
+      ctx.clearRect(0, 0, width, height);
+    };
+
+    var drawLayer = function(ctx, layer) {
+      ctx.beginPath();
+      ctx.lineWidth = layer.thickness;
+      ctx.strokeStyle = layer.color;
+      ctx.moveTo(layer.points[0].x, layer.points[0].y);
+      _.each(_.rest(layer.points, 1), function(point) {
+        ctx.lineTo(point.x, point.y);
+      });
+      ctx.stroke();
+    };
+
+    var showNewLayer = function() {
+      clear(topCtx);
+      drawLayer(topCtx, newLayer);
+    };
+
+    var drawChild = function(snapshot) {
+      drawLayer(bottomCtx, snapshot.val());
+    };
+
+    var redraw = function() {
+      clear(bottomCtx);
+      layersRef.once('value', function(snapshot) {
+        snapshot.forEach(drawChild);
+      });
+    };
+
+    layersRef.on('child_added', drawChild);
+    layersRef.on('child_removed', redraw);
+
+    usersRef.on('child_changed', function(snapshot) {
+      var name = snapshot.name();
+      var user = snapshot.val();
+
+      id = "cursor_"+name;
+      var $cursor = $("#"+id);
+      if(!$cursor.length) {
+        $cursor = $('<div>').attr('id', id).addClass('cursor').text(name)
+            .appendTo('body');
+      }
+
+      $cursor.css('left', user.cursorPoint.x).css('top', user.cursorPoint.y);
+    });
+
+    usersRef.on('child_removed', function(snapshot) {
+      $("#cursor_"+snapshot.name()).remove();
+    });
+
+    // User input:
+
+    userRef.removeOnDisconnect();
+
+    $topCanvas.on('mousedown', function(e) {
+      newLayer = {
+        points: [{x: e.pageX, y: e.pageY}],
+        color: $("input[name=brush]:checked").attr('color'),
+        thickness: $("input[name=brush]:checked").attr('thickness')
+      };
+
+      var now = function() { return new Date().getTime() };
+      var last = 0;
+      $body.on('mousemove.brush', function(e) {
+        if(last < now() - 20) {
+          newLayer.points.push({x: e.pageX, y: e.pageY});
+          showNewLayer();
+          last = now();
+        }
+      });
+
+      $body.one('mouseup', function(e) {
+        $body.off('mousemove.brush');
+        layersRef.push(newLayer);
+        clear(topCtx);
+      });
+    });
+
+    $body.on(
+        'mousemove',
+        _.throttle(function(e) {
+          userRef.child('cursorPoint').set({x: e.pageX, y: e.pageY});
+        }, 30)
+    );
+
+    $("#clear").on('click', function() {
+      layersRef.remove();
+    });
+
+    $("#undo").on('click', function() {
+      var query = layersRef.limit(1);
+      query.once('child_added', function(snapshot) {
+        layersRef.child(snapshot.name()).remove();
+      });
+    });
+
+    $(document).keydown(function(e) {
+      console.log(e.which)
+      $("*[hotkey="+e.which+"]").click();
+    });
+
+    // prevent text cursor from showing up as you draw
+    topCanvas.onselectstart = function () { return false; };
+  }
+
+</script>
+</body>

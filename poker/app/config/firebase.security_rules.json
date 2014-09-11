@@ -1,0 +1,11 @@
+// This is an initial version of security rules, a lot more can be added to it
+{
+  "rules": {
+    "games": {
+      "$secretid": {
+        ".read": true,
+        ".write": true
+      }
+    }
+  }
+}

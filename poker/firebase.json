@@ -1,0 +1,9 @@
+{
+  "firebase": "at-poker",
+  "public": ".",
+  "ignore": [
+    "firebase.json",
+    ".*",
+    "**/node_modules/**"
+  ]
+}

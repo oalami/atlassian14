@@ -1,0 +1,27 @@
+{
+    "name": "Whiteboard",
+    "description": "Firebase Atlassian Connect Whiteboard add-on",
+    "key": "com.firebase.example.whiteboard",
+    "_baseUrl": "http://localhost:8000",     
+    "baseUrl": "https://at-whiteboard.firebaseapp.com",
+    "vendor": {
+        "name": "Firebase, Inc.",
+        "url": "https://firebase.com"
+    },
+    "authentication": {
+        "type": "none"
+    },
+    "scopes": [ "READ", "WRITE" ],
+    "modules": {
+        "generalPages": [
+            {
+                "url": "/whiteboard.html",
+                "key": "whiteboard",
+                "location": "system.top.navigation.bar",
+                "name": {
+                    "value": "Whiteboard"
+                }
+            }
+        ]
+    }
+}

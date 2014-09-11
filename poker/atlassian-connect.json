@@ -1,0 +1,27 @@
+{
+    "name": "Firepoker",
+    "description": "Firebase Atlassian Connect Firepoker add-on",
+    "key": "com.firebase.example.firepoker",
+    "baseUrl": "http://localhost:8000",         
+    "_baseUrl": "https://at-poker.firebaseapp.com:8000",         
+    "vendor": {
+        "name": "Firebase, Inc.",
+        "url": "https://firebase.com"
+    },
+    "authentication": {
+        "type": "none"
+    },
+    "scopes": [ "READ", "WRITE" ],
+    "modules": {
+        "jiraProjectTabPanels": [
+            {
+                "url": "/index.html?projectId={project.id}",
+                "weight": 100,
+                "key": "index",                
+                "name": {
+                   "value": "Play Firepoker"
+                }             
+            }
+        ]
+    }
+}

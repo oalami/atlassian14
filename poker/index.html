@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<head>
+  <title>Planning Poker</title>
+
+<style>
+  body {
+    font-family: arial, sans serif;
+    font-size: 14px;
+    font-weight: bold;
+  }
+
+  li {
+    font-weight: normal;
+    color: blue;
+    cursor: pointer; 
+  }
+
+  #results {
+    font-weight: normal;
+  }
+
+  input { 
+    margin: 0px 5px 5px 2px;
+  }
+</style>
+
+<script src="https://cdn.firebase.com/js/client/1.0.19/firebase.js"></script>
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+<script src="http://localhost:2990/jira/atlassian-connect/all.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+  var ref = new Firebase("https://at-poker.firebaseio.com/games");
+  var currentQueryRef = null;
+  var fbIssues = [];
+
+  (function($) {
+    $.QueryString = (function(a) {
+      if (a == "") return {};
+      var b = {};
+      for (var i = 0; i < a.length; ++i)
+      {
+        var p=a[i].split('=');
+        if (p.length != 2) continue;
+        b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+      }
+      return b;
+    })(window.location.search.substr(1).split('&'))
+  })(jQuery);
+
+  $(document).ready(function() {    
+    var projectId = $.QueryString['projectId'];
+    var jql = 'project = '+projectId+' AND resolution = Unresolved AND status != Closed AND issuetype = "New Feature" ORDER BY priority DESC'
+
+    $('#jql').val(jql);
+
+    $('#search').click(searchJira);
+    $('#send').click(sendToFirepoker);
+
+    populateGameList();
+  });
+
+  //Populate the game list from FirePoker
+  function populateGameList() {
+    ref.on('child_added', function(snapshot) {
+      var game = snapshot.val();
+      var gameId = snapshot.name();
+      var gameName = game.name;
+      var li = $('<li>').text(game.name).click(function() {
+        $('#gameId').val(gameId);
+      })
+
+      li.appendTo('#available_games');
+
+    });    
+  }
+
+  //Search Jira for issues
+  function searchJira() {
+    $('#results').text('...');
+    var jql = $('#jql').val();
+
+    AP.require('request', function(request){
+      request({
+        url: '/rest/api/2/search?jql=' + encodeURIComponent(jql),
+        success: function(response){
+          //console.log(response);
+          var issues = $.parseJSON(response).issues;
+
+          fbIssues = [];
+
+          //format the results for FirePoker
+          $('#results').text('');
+          for (var i = issues.length - 1; i >= 0; i--) {
+            fbIssues.push({
+              endedAt: false,
+              points: 0,
+              results: false,
+              startedAt: false,
+              status: "queue",
+              title: issues[i].fields.summary,
+              notes: issues[i].key
+            });
+
+            $('<p id='+issues[i].key+'>').append('<a target="_blank" href="http://localhost:2990/jira/browse/'+issues[i].key+'">'+issues[i].key+'</a>').append(' ' + issues[i].fields.summary).appendTo("#results");
+          }
+        },
+        error: function(error) {
+          console.log(error);
+        }
+      });
+    });
+  }
+
+  //Send the stories to FirePoker
+  function sendToFirepoker() {
+    if(currentQueryRef != null) {
+      currentQueryRef.off('child_changed');
+    }
+
+    var currentGame = $("#gameId").val();
+    
+    //https://at-poker.firebaseio.com/games/[game-id]/stories
+    var storiesRef = ref.child(currentGame).child('stories');
+
+    storiesRef.set(fbIssues);
+    
+    //check to see if a value has been saved and update the issue
+    storiesRef.on('child_changed', function(snapshot) {
+      var story = snapshot.val();
+
+      //if the story is closed, update the jira issue      
+      if(story.status === 'closed') {        
+        $('#' + story.notes).append(' <b>(' +story.points + ')</b>');
+
+        AP.require('request', function(request){
+          request({
+            url: '/rest/api/2/issue/' + encodeURIComponent(story.notes),
+            type: 'PUT',
+            contentType: 'application/json',
+            data: '{"fields": {"customfield_10100": '+story.points+'}}',
+            success: function(response){
+              console.log(response);             
+            },
+            error: function(error) {
+              console.log(error);
+            }
+          });
+        });      
+      }      
+    }); 
+
+    currentQueryRef = storiesRef;
+  }
+
+
+</script>
+</head>
+
+<body>
+
+<p>JQL: <input type="text" id="jql" size="120"/> <button type="button" id="search">Search</button><br/>
+
+Poker Game ID: <input type="text" id="gameId" size="50" name="Poker Game ID"> <button type="button" id="send">Send to Game</button>
+
+<p>Available Games: 
+<ul id="available_games">
+</ul>
+
+
+<p>Search Results</p>
+<div id="results">...</div>
+</body>
